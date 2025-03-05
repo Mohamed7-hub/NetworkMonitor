@@ -10,4 +10,18 @@
     <string name="wifi">WiFi</string>
     <string name="mobile_data">Mobile Data</string>
     <string name="cancel">Cancel</string>
+
+    <!-- New strings for Material Design 3 UI -->
+    <string name="network_status">Network Status</string>
+    <string name="network_details">Network Details</string>
+    <string name="actions">Actions</string>
+    <string name="check_now">Check Now</string>
+    <string name="connection_type">Connection Type:</string>
+    <string name="ip_address">IP Address:</string>
+    <string name="last_check">Last Check:</string>
+    <string name="unknown">Unknown</string>
+    <string name="just_now">Just now</string>
+    <string name="checking_status">Checking Status…</string>
+    <string name="checking_connection">Checking your connection…</string>
 </resources>
+

@@ -2,29 +2,49 @@ package com.example.networkmonitor;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
 
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.wifi.WifiInfo;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.text.format.Formatter;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.material.appbar.MaterialToolbar;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.snackbar.Snackbar;
+
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.text.SimpleDateFormat;
+import java.util.Collections;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity implements NetworkChangeReceiver.NetworkChangeListener {
 
     private NetworkChangeReceiver networkChangeReceiver;
-    private ConstraintLayout mainLayout;
+    private CoordinatorLayout mainLayout;
     private TextView statusText;
+    private TextView statusDescription;
     private ImageView statusIcon;
+    private Button checkNowButton;
     private Button settingsButton;
+    private TextView connectionTypeText;
+    private TextView ipAddressText;
+    private TextView lastCheckText;
+    private MaterialCardView statusCard;
     private boolean isConnected;
 
     @Override
@@ -35,8 +55,18 @@ public class MainActivity extends AppCompatActivity implements NetworkChangeRece
         // Initialize views
         mainLayout = findViewById(R.id.main_layout);
         statusText = findViewById(R.id.status_text);
+        statusDescription = findViewById(R.id.status_description);
         statusIcon = findViewById(R.id.status_icon);
+        checkNowButton = findViewById(R.id.check_now_button);
         settingsButton = findViewById(R.id.settings_button);
+        connectionTypeText = findViewById(R.id.connection_type);
+        ipAddressText = findViewById(R.id.ip_address);
+        lastCheckText = findViewById(R.id.last_check);
+        statusCard = findViewById(R.id.status_card);
+
+        // Set up toolbar
+        MaterialToolbar toolbar = findViewById(R.id.toolbar);
+        setSupportActionBar(toolbar);
 
         // Set initial network status
         isConnected = NetworkUtil.isNetworkConnected(this);
@@ -44,6 +74,14 @@ public class MainActivity extends AppCompatActivity implements NetworkChangeRece
 
         // Initialize network change receiver
         networkChangeReceiver = new NetworkChangeReceiver(this);
+
+        // Set up check now button
+        checkNowButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                checkNetworkStatus();
+            }
+        });
 
         // Set up settings button
         settingsButton.setOnClickListener(new View.OnClickListener() {
@@ -60,6 +98,9 @@ public class MainActivity extends AppCompatActivity implements NetworkChangeRece
         // Register the broadcast receiver
         IntentFilter intentFilter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
         registerReceiver(networkChangeReceiver, intentFilter);
+
+        // Check network status when resuming
+        checkNetworkStatus();
     }
 
     @Override
@@ -89,14 +130,91 @@ public class MainActivity extends AppCompatActivity implements NetworkChangeRece
         }
     }
 
+    private void checkNetworkStatus() {
+        // Update the last check time
+        SimpleDateFormat sdf = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
+        String currentTime = sdf.format(new Date());
+        lastCheckText.setText(currentTime);
+
+        // Check if connected
+        boolean isNowConnected = NetworkUtil.isNetworkConnected(this);
+        updateUI(isNowConnected);
+
+        // Update connection details
+        updateConnectionDetails();
+    }
+
     private void updateUI(boolean isConnected) {
         if (isConnected) {
             statusText.setText(R.string.internet_connected);
+            statusDescription.setText("Your device is connected to the internet");
             statusIcon.setImageResource(R.drawable.ic_network_check);
+            statusCard.setCardBackgroundColor(getResources().getColor(R.color.md_theme_primary, null));
         } else {
             statusText.setText(R.string.no_internet);
+            statusDescription.setText("Your device is not connected to the internet");
             statusIcon.setImageResource(R.drawable.ic_network_error);
+            statusCard.setCardBackgroundColor(getResources().getColor(R.color.md_theme_errorContainer, null));
         }
+    }
+
+    private void updateConnectionDetails() {
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
+
+        if (activeNetwork != null) {
+            // Update connection type
+            String connectionType = "Unknown";
+            switch (activeNetwork.getType()) {
+                case ConnectivityManager.TYPE_WIFI:
+                    connectionType = "WiFi";
+                    break;
+                case ConnectivityManager.TYPE_MOBILE:
+                    connectionType = "Mobile Data";
+                    break;
+                case ConnectivityManager.TYPE_ETHERNET:
+                    connectionType = "Ethernet";
+                    break;
+            }
+            connectionTypeText.setText(connectionType);
+
+            // Update IP address
+            String ipAddress = getIPAddress();
+            ipAddressText.setText(ipAddress);
+        } else {
+            connectionTypeText.setText(R.string.unknown);
+            ipAddressText.setText(R.string.unknown);
+        }
+    }
+
+    private String getIPAddress() {
+        try {
+            // Try WiFi IP first
+            WifiManager wifiManager = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+            if (wifiManager.isWifiEnabled()) {
+                WifiInfo wifiInfo = wifiManager.getConnectionInfo();
+                int ipInt = wifiInfo.getIpAddress();
+                return Formatter.formatIpAddress(ipInt);
+            }
+
+            // Try other network interfaces
+            List<NetworkInterface> interfaces = Collections.list(NetworkInterface.getNetworkInterfaces());
+            for (NetworkInterface intf : interfaces) {
+                List<InetAddress> addrs = Collections.list(intf.getInetAddresses());
+                for (InetAddress addr : addrs) {
+                    if (!addr.isLoopbackAddress()) {
+                        String sAddr = addr.getHostAddress();
+                        boolean isIPv4 = sAddr.indexOf(':') < 0;
+                        if (isIPv4) {
+                            return sAddr;
+                        }
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return "Unknown";
     }
 
     private void showNetworkSnackbar() {
@@ -105,13 +223,7 @@ public class MainActivity extends AppCompatActivity implements NetworkChangeRece
                     @Override
                     public void onClick(View view) {
                         // Check network status again
-                        boolean isNowConnected = NetworkUtil.isNetworkConnected(MainActivity.this);
-                        updateUI(isNowConnected);
-
-                        if (!isNowConnected) {
-                            // Still not connected, show dialog
-                            showNetworkDialog();
-                        }
+                        checkNetworkStatus();
                     }
                 });
         snackbar.show();
